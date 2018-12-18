@@ -19,12 +19,12 @@ public class SaxTester {
     try {
       TestBean testBean1 = new TestBean(1, "test1", "password1", null,
               new TestBean(2, "test2", "password2", null, null, null),
-              new TestBean(3, "test3", "password3", null, null,
-                      new TestBean(4, "test4", "password4", null, null, null)));
+              new TestBean(3, "test3", "password3", null,
+                      new TestBean(4, "test4", "password4", null, null, null), null));
 
 
       System.out.println(testBean1);
-      String xml = SaxUtil.childToXml(testBean1);
+      String xml = SaxUtil.objectToXml(testBean1);
       System.out.println(xml);
       TestBean parseTestBean = SaxUtil.parse(xml, TestBean.class);
       System.out.println(parseTestBean);
@@ -43,6 +43,7 @@ public class SaxTester {
       order.setCommodities(commodities);
       Commodity commodity = new Commodity();
       commodities.add(commodity);
+      commodities.add(commodity);
       commodity.setId(1);
       commodity.setName("cname");
       commodity.setDesc("test");
@@ -55,7 +56,7 @@ public class SaxTester {
       attr.put("h", "20cm");
       attr.put("l", "20cm");
       System.out.println(order);
-      xml = SaxUtil.childToXml(order);
+      xml = SaxUtil.objectToXml(order);
       System.out.println(xml);
       order = SaxUtil.parse(xml, Order.class);
       System.out.println(order);
