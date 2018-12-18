@@ -60,13 +60,7 @@ public class SaxTester {
       System.out.println(xml);
       order = SaxUtil.parse(xml, Order.class);
       System.out.println(order);
-    } catch (TransformerConfigurationException e) {
-      e.printStackTrace();
-    } catch (IOException e) {
-      e.printStackTrace();
     } catch (TranslateXmlException e) {
-      e.printStackTrace();
-    } catch (ParserConfigurationException e) {
       e.printStackTrace();
     } catch (SAXException e) {
       e.printStackTrace();

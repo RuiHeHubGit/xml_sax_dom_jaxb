@@ -1,22 +1,15 @@
 package sax;
 
-import static com.sun.xml.internal.stream.writers.XMLStreamWriterImpl.UTF_8;
-
 import com.sun.org.apache.xerces.internal.impl.PropertyManager;
 import com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl;
 import com.sun.xml.internal.stream.writers.XMLStreamWriterImpl;
 import com.sun.xml.internal.ws.util.xml.StAXResult;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.lang.reflect.*;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.Map.Entry;
-import java.util.function.Function;
-import java.util.logging.Logger;
+import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
+import org.xml.sax.helpers.AttributesImpl;
+import org.xml.sax.helpers.DefaultHandler;
+
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.stream.XMLStreamWriter;
@@ -26,11 +19,19 @@ import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.sax.SAXTransformerFactory;
 import javax.xml.transform.sax.TransformerHandler;
-import org.xml.sax.Attributes;
-import org.xml.sax.SAXException;
-import org.xml.sax.SAXParseException;
-import org.xml.sax.helpers.AttributesImpl;
-import org.xml.sax.helpers.DefaultHandler;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.lang.reflect.*;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.function.Function;
+import java.util.logging.Logger;
+
+import static com.sun.xml.internal.stream.writers.XMLStreamWriterImpl.UTF_8;
 
 /**
  * @author ruihe
@@ -39,7 +40,7 @@ public class SaxUtil {
   private static SAXParserFactoryImpl factory = new SAXParserFactoryImpl();
   private static HashMap<Class<?>, Function<String,Object>> baseTypeParseMap = new HashMap<>();
   private static SimpleDateFormat formDate = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US);
-  private static Logger log = Logger.getLogger("lavasoft");
+  private static Logger log = Logger.getLogger("sax");
 
   /**
    * @since 1.8
@@ -66,10 +67,11 @@ public class SaxUtil {
       try {
         return formDate.parse(s);
       } catch (ParseException e) {
-        e.printStackTrace();
+        log.severe(e.getLocalizedMessage());
       }
       return null;
     });
+    log.info("SaxUtil initialization complete.");
   }
 
   /**
@@ -85,14 +87,25 @@ public class SaxUtil {
    * @throws InstantiationException
    */
   public static <T> T parse(String xml, Class<T> tClass)
-      throws ParserConfigurationException, SAXException, IOException {
+          throws SAXException {
     if(xml == null || xml.isEmpty() || tClass == null) {
       throw new IllegalArgumentException();
     }
     Entry<String, T> instance = new SimpleEntry<String, T>("object", null);
-    SAXParser parser = factory.newSAXParser();
+    SAXParser parser = null;
+    try {
+      parser = factory.newSAXParser();
+    } catch (ParserConfigurationException e) {
+      log.severe(e.getLocalizedMessage());
+      throw new SAXException(e);
+    }
     ByteArrayInputStream inputStream = new ByteArrayInputStream(xml.getBytes());
-    parser.parse(inputStream, new DefaultParseHandler(tClass, instance));
+    try {
+      parser.parse(inputStream, new DefaultParseHandler(tClass, instance));
+    } catch (IOException e) {
+      log.severe(e.getLocalizedMessage());
+      throw new SAXException(e);
+    }
     return instance.getValue();
   }
 
@@ -104,16 +117,28 @@ public class SaxUtil {
    * @throws IOException
    */
   public static String objectToXml(final Object obj)
-      throws TransformerConfigurationException, IOException, TranslateXmlException {
+          throws TranslateXmlException {
 
     SAXTransformerFactory factory = (SAXTransformerFactory) SAXTransformerFactory.newInstance();
-    TransformerHandler handler = factory.newTransformerHandler();
+    TransformerHandler handler = null;
+    try {
+      handler = factory.newTransformerHandler();
+    } catch (TransformerConfigurationException e) {
+      log.severe(e.getLocalizedMessage());
+      throw new TranslateXmlException(e);
+    }
     Transformer transformer = handler.getTransformer();
     transformer.setOutputProperty(OutputKeys.ENCODING, UTF_8);
     transformer.setOutputProperty(OutputKeys.INDENT, "yes");
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     PropertyManager propertyManager = new PropertyManager(PropertyManager.CONTEXT_WRITER);
-    XMLStreamWriter writer = new XMLStreamWriterImpl(outputStream, propertyManager);
+    XMLStreamWriter writer = null;
+    try {
+      writer = new XMLStreamWriterImpl(outputStream, propertyManager);
+    } catch (IOException e) {
+      log.severe(e.getLocalizedMessage());
+      throw new TranslateXmlException(e);
+    }
     Result result = new StAXResult(writer);
     handler.setResult(result);
 
@@ -121,14 +146,16 @@ public class SaxUtil {
       handler.startDocument();
       handler.startElement("", "", obj.getClass().getSimpleName(), createAttributes(obj));
     } catch (SAXException e) {
-      e.printStackTrace();
+      log.severe(e.getLocalizedMessage());
+      throw new TranslateXmlException(e);
     }
     childToInnerXml(obj, handler);
     try {
       handler.endElement("", "", obj.getClass().getSimpleName());
       handler.endDocument();
     } catch (SAXException e) {
-      e.printStackTrace();
+      log.severe(e.getLocalizedMessage());
+      throw new TranslateXmlException(e);
     }
     return new String(outputStream.toByteArray());
   }
@@ -140,7 +167,7 @@ public class SaxUtil {
    * @throws TranslateXmlException
    */
   private static void childToInnerXml(Object obj, TransformerHandler handler)
-      throws TranslateXmlException {
+          throws TranslateXmlException {
     if(obj == null) {
       return;
     }
@@ -179,7 +206,7 @@ public class SaxUtil {
   }
 
   private static void collectionToXml(Collection collection, TransformerHandler handler)
-      throws TranslateXmlException {
+          throws TranslateXmlException {
     if(collection == null) {
       return;
     }
@@ -310,7 +337,7 @@ public class SaxUtil {
 
     @Override
     public void startElement(String uri, String localName, String qName, Attributes attributes)
-        throws SAXException {
+            throws SAXException {
       super.startElement(uri, localName, qName, attributes);
       ++xmlPathLength;
       currentQName = qName;
@@ -389,6 +416,7 @@ public class SaxUtil {
           setObjectFieldValue(currentObject, currentField, parserBaseTypeValueByClass(value, currentField.getType()));
         }
       } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+        log.severe(e.getLocalizedMessage());
         throw new SAXException(e);
       }
     }
@@ -455,22 +483,42 @@ public class SaxUtil {
         try {
           return parseElementAttributes(HashMap.class, attributes);
         } catch (Exception e) {
+          log.severe(e.getLocalizedMessage());
           throw new SAXException(e);
         }
       } else {
         try {
           return parseElementAttributes(keyTypeClass, attributes);
         } catch (Exception e) {
+          log.severe(e.getLocalizedMessage());
           throw new SAXException(e);
         }
       }
     }
 
     private Object parseElementAttributes(Class<?> keyTypeClass, Attributes attributes) throws IllegalAccessException, InstantiationException {
-      if(keyTypeClass == null) {
+      if(keyTypeClass == null || attributes == null) {
         return null;
       }
       Object tag = keyTypeClass.newInstance();
+      if(Map.class.isAssignableFrom(keyTypeClass)) {
+        for (int i=0; i<attributes.getLength(); ++i) {
+          ((Map)tag).put(attributes.getQName(i), attributes.getValue(i));
+        }
+      }
+      Field[] fields = tag.getClass().getDeclaredFields();
+      for (Field f : fields) {
+        for (int i=0; i<attributes.getLength(); ++i) {
+          if(f.getName().equals(attributes.getQName(i))) {
+            try {
+              setObjectFieldValue(tag, f, parserBaseTypeValueByClass(attributes.getValue(i), f.getType()));
+            } catch (Exception e) {
+              log.severe(e.getLocalizedMessage());
+            }
+            break;
+          }
+        }
+      }
       return tag;
     }
 
@@ -504,6 +552,7 @@ public class SaxUtil {
           rootInstance.setValue(currentObject);
         }
       } catch (Exception e) {
+        log.severe(e.getLocalizedMessage());
         throw new SAXException(e);
       }
 
@@ -516,6 +565,7 @@ public class SaxUtil {
             collectionTypeClass = HashMap.class;
           }
         } catch (Exception e) {
+          log.severe(e.getLocalizedMessage());
           throw new SAXException(e);
         }
         isCollection = true;
@@ -533,6 +583,7 @@ public class SaxUtil {
             mapTypeClasses[1] = null;
           }
         } catch (Exception e) {
+          log.severe(e.getLocalizedMessage());
           throw new SAXException(e);
         }
         isMap = true;
