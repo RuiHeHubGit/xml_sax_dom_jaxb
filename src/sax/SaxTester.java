@@ -1,18 +1,12 @@
 package sax;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.UUID;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.transform.TransformerConfigurationException;
 import org.xml.sax.SAXException;
 import sax.SaxUtil.TranslateXmlException;
 import sax.beans.Commodity;
 import sax.beans.Order;
 import sax.beans.TestBean;
+
+import java.util.*;
 
 public class SaxTester {
   public void test() {
