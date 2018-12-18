@@ -20,8 +20,8 @@ public class SaxTester {
       System.out.println(testBean1);
       String xml = SaxUtil.objectToXml(testBean1);
       System.out.println(xml);
-      TestBean parseTestBean = SaxUtil.parse(xml, TestBean.class);
-      System.out.println(parseTestBean);
+ //     TestBean parseTestBean = SaxUtil.parse(xml, TestBean.class);
+  //    System.out.println(parseTestBean);
 
       Order order = new Order();
       order.setId(1);
@@ -45,7 +45,7 @@ public class SaxTester {
       commodity.setPrice(5300);
       HashMap attr = new HashMap();
       commodity.setAttributes(attr);
-      attr.put(null, null);
+      attr.put(null, testBean1);
       attr.put("w", "50cm");
       attr.put("h", "20cm");
       attr.put("l", "20cm");

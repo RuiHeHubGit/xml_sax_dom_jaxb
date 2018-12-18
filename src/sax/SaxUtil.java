@@ -291,7 +291,7 @@ public class SaxUtil {
 
   private static Class getBaseTypeTypeName(String typeName) {
     for (Class clazz : baseTypeParseMap.keySet()) {
-      if(clazz.getName().equals(typeName)) {
+      if(clazz.getSimpleName().equals(typeName)) {
         return clazz;
       }
     }
@@ -312,9 +312,10 @@ public class SaxUtil {
     private HashMap<Integer, Object> objectsMap;
     private String currentQName;
     private String elementType;
-    private Object mapKey;
+    private Object lastMapKey;
     private boolean isCollection;
     private boolean isMap;
+    private boolean mayBeMap;
 
 
     public DefaultParseHandler(Class<?> rootClass, Entry rootInstance) {
@@ -343,32 +344,49 @@ public class SaxUtil {
       currentQName = qName;
       elementType = attributes.getValue("type");
 
-      if(xmlPathLength - rootObjPathLength > 1) {
+      if(!mayBeMap && xmlPathLength - rootObjPathLength > 1) {
         return;
       }
 
-      currentField = checkCurrentField(currentClass, qName);
-
       Class fieldClass = null;
-      if(isCollection) {
+
+      if(rootInstance.getValue() == null) {
+        fieldClass = rootClass;
+      } else if(mayBeMap) {
+        mayBeMap = false;
+        createFieldObjectAndInitInfo(HashMap.class, null, lastMapKey);
+      } else if(isCollection) {
         isCollection = false;
         fieldClass = collectionTypeClass;
         currentField = null;
       } else if(isMap) {
         isMap = false;
         fieldClass = mapTypeClasses[1];
+        mapTypeClasses[1] = null;
+        if(fieldClass == null) {
+          fieldClass = getBaseTypeTypeName(elementType);
+        }
+        if(fieldClass == null) {
+          mayBeMap = true;
+          lastMapKey = getMapKey(HashMap.class, attributes, qName);
+        }
         currentField = null;
-      } else if(currentField != null) {
-        fieldClass = currentField.getType();
+      } else {
+        currentField = checkCurrentField(currentClass, qName);
+        if(currentField != null) {
+          fieldClass = currentField.getType();
+        } else if(elementType != null){
+          fieldClass = getBaseTypeTypeName(elementType);
+        } else {
+          if(fieldClass == null) {
+            mayBeMap = true;
+            lastMapKey = getMapKey(HashMap.class, attributes, qName);
+          }
+        }
       }
 
-      if(rootInstance.getValue() == null) {
-        fieldClass = rootClass;
-      }
-
-      if(fieldClass != null && baseTypeParseMap.get(fieldClass) == null) {
-        createFieldObjectAndInitInfo(fieldClass, attributes);
-        ++rootObjPathLength;
+      if(fieldClass != null && (baseTypeParseMap.get(fieldClass) == null || Map.class.isAssignableFrom(fieldClass))) {
+        createFieldObjectAndInitInfo(fieldClass, attributes, null);
       }
     }
 
@@ -378,23 +396,24 @@ public class SaxUtil {
       --xmlPathLength;
       currentQName = "";
       elementType = "";
-      mapKey = null;
+      lastMapKey = null;
+      mayBeMap = false;
 
       if(rootObjPathLength == xmlPathLength) {
         isCollection = false;
         isMap = false;
       }
 
-      if(rootObjPathLength > xmlPathLength) {
-        rootObjPathLength = xmlPathLength;
-        currentObject = objectsMap.get(rootObjPathLength);
-      }
-
-      Object paren = objectsMap.get(rootObjPathLength - 1);
-      if(paren != null) {
-        if(Collection.class.isAssignableFrom(paren.getClass())) {
+      Object parent = objectsMap.get(xmlPathLength - 1);
+      if(parent != null) {
+        if(Collection.class.isAssignableFrom(parent.getClass())) {
           isCollection = true;
         }
+      }
+
+      if(rootObjPathLength > xmlPathLength) {
+        rootObjPathLength = xmlPathLength;
+        currentObject = parent;
       }
     }
 
@@ -404,14 +423,7 @@ public class SaxUtil {
       String value = new String(ch, start, length);
       try {
         if(Map.class.isAssignableFrom(currentObject.getClass())) {
-          Class valueType = mapTypeClasses[1];
-          if(valueType == null) {
-            valueType = getBaseTypeTypeName(elementType);
-          }
-          if(mapKey == null) {
-            mapKey = currentQName;
-          }
-          putMapKeyValue(currentObject, mapKey, parserBaseTypeValueByClass(value, valueType));
+          putMapKeyValue(currentObject, currentQName, parserBaseTypeValueByClass(value, getBaseTypeTypeName(elementType)));
         } else {
           setObjectFieldValue(currentObject, currentField, parserBaseTypeValueByClass(value, currentField.getType()));
         }
@@ -424,11 +436,13 @@ public class SaxUtil {
     @Override
     public void error(SAXParseException e) throws SAXException {
       super.error(e);
+      log.finest(e.getLocalizedMessage());
     }
 
     @Override
     public void fatalError(SAXParseException e) throws SAXException {
       super.fatalError(e);
+      log.finest(e.getLocalizedMessage());
     }
 
     /*
@@ -477,7 +491,7 @@ public class SaxUtil {
     }
 
     private Object getMapKey(Class<?> keyTypeClass, Attributes attributes, String qName) throws SAXException{
-      if(keyTypeClass == null || String.class.isAssignableFrom(keyTypeClass)) {
+      if(keyTypeClass == null || attributes.getLength() == 0 || String.class.isAssignableFrom(keyTypeClass)) {
         return qName;
       } else if(Object.class.equals(keyTypeClass)) {
         try {
@@ -529,7 +543,7 @@ public class SaxUtil {
       ((Map)map).put(key, value);
     }
 
-    private void createFieldObjectAndInitInfo(Class fieldClass, Attributes attributes) throws SAXException {
+    private void createFieldObjectAndInitInfo(Class fieldClass, Attributes attributes, Object lastQName) throws SAXException {
       if(Object.class.equals(fieldClass)) {
         fieldClass = HashMap.class;
       }
@@ -538,11 +552,14 @@ public class SaxUtil {
         Object parent = objectsMap.get(rootObjPathLength-1);
         currentObject = createInstance(fieldClass);
         objectsMap.put(rootObjPathLength, currentObject);
-
+        ++rootObjPathLength;
         if(parent != null) {
           if(Map.class.isAssignableFrom(parent.getClass())) {
-            mapKey = getMapKey(mapTypeClasses[0], attributes, currentQName);
-            putMapKeyValue(parent, mapKey, currentObject);
+            Object key = lastQName;
+            if(key == null) {
+              key = getMapKey(mapTypeClasses[0], attributes, currentQName);
+            }
+            putMapKeyValue(parent, key, currentObject);
           } else {
             setObjectFieldValue(parent, currentField, currentObject);
           }
@@ -579,7 +596,7 @@ public class SaxUtil {
             mapTypeClasses[0] = classes[0];
             mapTypeClasses[1] = classes[1];
           } else {
-            mapTypeClasses[0] = null;
+            mapTypeClasses[0] = HashMap.class;
             mapTypeClasses[1] = null;
           }
         } catch (Exception e) {

@@ -11,7 +11,7 @@ public class Commodity {
   private Integer type;
   private String desc;
   private Date createTime;
-  private Map<String, String> attributes;
+  private Map<String, Object> attributes;
 
   public Integer getId() {
     return id;
@@ -69,11 +69,11 @@ public class Commodity {
     this.createTime = createTime;
   }
 
-  public Map<String, String> getAttributes() {
+  public Map<String, Object> getAttributes() {
     return attributes;
   }
 
-  public void setAttributes(Map<String, String> attributes) {
+  public void setAttributes(Map<String, Object> attributes) {
     this.attributes = attributes;
   }
 
