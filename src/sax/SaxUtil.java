@@ -34,6 +34,7 @@ import java.util.logging.Logger;
 import static com.sun.xml.internal.stream.writers.XMLStreamWriterImpl.UTF_8;
 
 /**
+ * Java object and xml document mutual conversion tool based on SAX
  * @author ruihe
  */
 public class SaxUtil {
@@ -43,7 +44,7 @@ public class SaxUtil {
   private static Logger log = Logger.getLogger("sax");
 
   /**
-   * @since 1.8
+   * @since jdk1.8
    */
   static {
     baseTypeParseMap.put(String.class, String::trim);
@@ -80,11 +81,7 @@ public class SaxUtil {
    * @param tClass
    * @param <T>
    * @return
-   * @throws ParserConfigurationException
    * @throws SAXException
-   * @throws IOException
-   * @throws IllegalAccessException
-   * @throws InstantiationException
    */
   public static <T> T parse(String xml, Class<T> tClass)
           throws SAXException {
@@ -101,7 +98,7 @@ public class SaxUtil {
     }
     ByteArrayInputStream inputStream = new ByteArrayInputStream(xml.getBytes());
     try {
-      parser.parse(inputStream, new DefaultParseHandler(tClass, instance));
+      parser.parse(inputStream, new ParseDefaultHandler(tClass, instance));
     } catch (IOException e) {
       log.severe(e.getLocalizedMessage());
       throw new SAXException(e);
@@ -110,11 +107,10 @@ public class SaxUtil {
   }
 
   /**
-   * object translate into xml not outer label
+   * object translate into xml
    * @param obj
    * @return
    * @throws TransformerConfigurationException
-   * @throws IOException
    */
   public static String objectToXml(final Object obj)
           throws TranslateXmlException {
@@ -205,6 +201,12 @@ public class SaxUtil {
     }
   }
 
+  /**
+   *translate a collection as xml
+   * @param collection
+   * @param handler
+   * @throws TranslateXmlException
+   */
   private static void collectionToXml(Collection collection, TransformerHandler handler)
           throws TranslateXmlException {
     if(collection == null) {
@@ -221,12 +223,18 @@ public class SaxUtil {
     }
   }
 
+  /**
+   * translate a map as xml
+   * @param map
+   * @param handler
+   * @throws TranslateXmlException
+   */
   private static void mapToXml(Map map, TransformerHandler handler) throws TranslateXmlException {
     if(map == null) {
       return;
     }
-    Set keySet = map.keySet();
-    for (Object key : keySet) {
+
+    for (Object key : map.keySet()) {
       try {
         String elementName = null;
         if(key == null) {
@@ -257,6 +265,11 @@ public class SaxUtil {
     }
   }
 
+  /**
+   * create attribute of element
+   * @param obj
+   * @return
+   */
   private static Attributes createAttributes(Object obj) {
     if(obj == null) {
       return null;
@@ -281,6 +294,12 @@ public class SaxUtil {
     return attributes;
   }
 
+  /**
+   * parse strings as object by the class
+   * @param value
+   * @param aClass
+   * @return
+   */
   private static Object parserBaseTypeValueByClass(String value, Class<?> aClass) {
     Function<String, Object> parser = baseTypeParseMap.get(aClass);
     if(parser != null) {
@@ -289,7 +308,12 @@ public class SaxUtil {
     return null;
   }
 
-  private static Class getBaseTypeTypeName(String typeName) {
+  /**
+   * get class from list of base types by name
+   * @param typeName
+   * @return
+   */
+  private static Class getBaseTypeByName(String typeName) {
     for (Class clazz : baseTypeParseMap.keySet()) {
       if(clazz.getSimpleName().equals(typeName)) {
         return clazz;
@@ -298,7 +322,10 @@ public class SaxUtil {
     return null;
   }
 
-  static class DefaultParseHandler extends DefaultHandler {
+  /**
+   * Default base class for SAX2 event handlers.
+   */
+  static class ParseDefaultHandler extends DefaultHandler {
     private Entry<String, Object> rootInstance;
     private int xmlPathLength;
     private int rootObjPathLength;
@@ -318,7 +345,7 @@ public class SaxUtil {
     private boolean mayBeMap;
 
 
-    public DefaultParseHandler(Class<?> rootClass, Entry rootInstance) {
+    public ParseDefaultHandler(Class<?> rootClass, Entry rootInstance) {
       this.rootClass = rootClass;
       this.rootInstance = rootInstance;
     }
@@ -364,7 +391,7 @@ public class SaxUtil {
         fieldClass = mapTypeClasses[1];
         mapTypeClasses[1] = null;
         if(fieldClass == null) {
-          fieldClass = getBaseTypeTypeName(elementType);
+          fieldClass = getBaseTypeByName(elementType);
         }
         if(fieldClass == null) {
           mayBeMap = true;
@@ -376,7 +403,7 @@ public class SaxUtil {
         if(currentField != null) {
           fieldClass = currentField.getType();
         } else if(elementType != null){
-          fieldClass = getBaseTypeTypeName(elementType);
+          fieldClass = getBaseTypeByName(elementType);
         } else {
           if(fieldClass == null) {
             mayBeMap = true;
@@ -423,7 +450,7 @@ public class SaxUtil {
       String value = new String(ch, start, length);
       try {
         if(Map.class.isAssignableFrom(currentObject.getClass())) {
-          putMapKeyValue(currentObject, currentQName, parserBaseTypeValueByClass(value, getBaseTypeTypeName(elementType)));
+          putMapKeyValue(currentObject, currentQName, parserBaseTypeValueByClass(value, getBaseTypeByName(elementType)));
         } else {
           setObjectFieldValue(currentObject, currentField, parserBaseTypeValueByClass(value, currentField.getType()));
         }
@@ -445,104 +472,13 @@ public class SaxUtil {
       log.finest(e.getLocalizedMessage());
     }
 
-    /*
-     * 获取field的泛型类型
-     * field
+    /**
+     * create instance of the field
+     * @param fieldClass
+     * @param attributes
+     * @param lastQName
+     * @throws SAXException
      */
-    public Class[] getActualTypeArguments(Field field) throws Exception{
-      Class[] classes = new Class[0];
-      if(field == null) {
-        return classes;
-      }
-      Type fieldGenericType = field.getGenericType();
-      if(fieldGenericType instanceof ParameterizedType) {
-        ParameterizedType parameterizedType = (ParameterizedType) field.getGenericType();
-        Type[] typeArguments = parameterizedType.getActualTypeArguments();
-        classes = new Class[typeArguments.length];
-        for (int i = 0; i < typeArguments.length; i++) {
-          classes[i] = Class.forName(typeArguments[i].getTypeName());
-        }
-      }
-      return classes;
-    }
-
-    private Object createInstance(Class<?> type)
-            throws IllegalAccessException, InstantiationException {
-      if(Map.class.isAssignableFrom(type)) {
-        return new HashMap<>();
-      } else if(Collection.class.isAssignableFrom(type)) {
-        return new ArrayList<>();
-      }
-      return type.newInstance();
-    }
-
-    private void setObjectFieldValue(Object tag, Field field, Object value)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-      if(tag != null) {
-        if(Collection.class.isAssignableFrom(tag.getClass())) {
-          ((Collection)tag).add(value);
-        } else if(field != null) {
-          String fName = field.getName();
-          String mName = "set" + fName.substring(0, 1).toUpperCase() + fName.substring(1, fName.length());
-          Method method = tag.getClass().getMethod(mName, field.getType());
-          method.invoke(tag, value);
-        }
-      }
-    }
-
-    private Object getMapKey(Class<?> keyTypeClass, Attributes attributes, String qName) throws SAXException{
-      if(keyTypeClass == null || attributes.getLength() == 0 || String.class.isAssignableFrom(keyTypeClass)) {
-        return qName;
-      } else if(Object.class.equals(keyTypeClass)) {
-        try {
-          return parseElementAttributes(HashMap.class, attributes);
-        } catch (Exception e) {
-          log.severe(e.getLocalizedMessage());
-          throw new SAXException(e);
-        }
-      } else {
-        try {
-          return parseElementAttributes(keyTypeClass, attributes);
-        } catch (Exception e) {
-          log.severe(e.getLocalizedMessage());
-          throw new SAXException(e);
-        }
-      }
-    }
-
-    private Object parseElementAttributes(Class<?> keyTypeClass, Attributes attributes) throws IllegalAccessException, InstantiationException {
-      if(keyTypeClass == null || attributes == null) {
-        return null;
-      }
-      Object tag = keyTypeClass.newInstance();
-      if(Map.class.isAssignableFrom(keyTypeClass)) {
-        for (int i=0; i<attributes.getLength(); ++i) {
-          ((Map)tag).put(attributes.getQName(i), attributes.getValue(i));
-        }
-      }
-      Field[] fields = tag.getClass().getDeclaredFields();
-      for (Field f : fields) {
-        for (int i=0; i<attributes.getLength(); ++i) {
-          if(f.getName().equals(attributes.getQName(i))) {
-            try {
-              setObjectFieldValue(tag, f, parserBaseTypeValueByClass(attributes.getValue(i), f.getType()));
-            } catch (Exception e) {
-              log.severe(e.getLocalizedMessage());
-            }
-            break;
-          }
-        }
-      }
-      return tag;
-    }
-
-    private void putMapKeyValue(Object map, Object key, Object value) {
-      if(map == null || !Map.class.isAssignableFrom(map.getClass())) {
-        throw new IllegalArgumentException();
-      }
-      ((Map)map).put(key, value);
-    }
-
     private void createFieldObjectAndInitInfo(Class fieldClass, Attributes attributes, Object lastQName) throws SAXException {
       if(Object.class.equals(fieldClass)) {
         fieldClass = HashMap.class;
@@ -609,6 +545,150 @@ public class SaxUtil {
       }
     }
 
+    /**
+     * get the generic type of the field
+     * @param field
+     * @return
+     * @throws Exception
+     */
+    public Class[] getActualTypeArguments(Field field) throws Exception{
+      Class[] classes = new Class[0];
+      if(field == null) {
+        return classes;
+      }
+      Type fieldGenericType = field.getGenericType();
+      if(fieldGenericType instanceof ParameterizedType) {
+        ParameterizedType parameterizedType = (ParameterizedType) field.getGenericType();
+        Type[] typeArguments = parameterizedType.getActualTypeArguments();
+        classes = new Class[typeArguments.length];
+        for (int i = 0; i < typeArguments.length; i++) {
+          classes[i] = Class.forName(typeArguments[i].getTypeName());
+        }
+      }
+      return classes;
+    }
+
+    /**
+     * create instance by type
+     * @param type
+     * @return
+     * @throws IllegalAccessException
+     * @throws InstantiationException
+     */
+    private Object createInstance(Class<?> type)
+            throws IllegalAccessException, InstantiationException {
+      if(Map.class.isAssignableFrom(type)) {
+        return new HashMap<>();
+      } else if(Collection.class.isAssignableFrom(type)) {
+        return new ArrayList<>();
+      }
+      return type.newInstance();
+    }
+
+    /**
+     * set value of object field
+     * @param tag
+     * @param field
+     * @param value
+     * @throws NoSuchMethodException
+     * @throws InvocationTargetException
+     * @throws IllegalAccessException
+     */
+    private void setObjectFieldValue(Object tag, Field field, Object value)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+      if(tag != null) {
+        if(Collection.class.isAssignableFrom(tag.getClass())) {
+          ((Collection)tag).add(value);
+        } else if(field != null) {
+          String fName = field.getName();
+          String mName = "set" + fName.substring(0, 1).toUpperCase() + fName.substring(1, fName.length());
+          Method method = tag.getClass().getMethod(mName, field.getType());
+          method.invoke(tag, value);
+        }
+      }
+    }
+
+    /**
+     * get key of map by key type and attributes or name of string
+     * @param keyTypeClass
+     * @param attributes
+     * @param qName
+     * @return
+     * @throws SAXException
+     */
+    private Object getMapKey(Class<?> keyTypeClass, Attributes attributes, String qName) throws SAXException{
+      if(keyTypeClass == null || attributes.getLength() == 0 || String.class.isAssignableFrom(keyTypeClass)) {
+        return qName;
+      } else if(Object.class.equals(keyTypeClass)) {
+        try {
+          return parseElementAttributes(HashMap.class, attributes);
+        } catch (Exception e) {
+          log.severe(e.getLocalizedMessage());
+          throw new SAXException(e);
+        }
+      } else {
+        try {
+          return parseElementAttributes(keyTypeClass, attributes);
+        } catch (Exception e) {
+          log.severe(e.getLocalizedMessage());
+          throw new SAXException(e);
+        }
+      }
+    }
+
+    /**
+     * get object by attributes of element
+     * @param keyTypeClass
+     * @param attributes
+     * @return
+     * @throws IllegalAccessException
+     * @throws InstantiationException
+     */
+    private Object parseElementAttributes(Class<?> keyTypeClass, Attributes attributes) throws IllegalAccessException, InstantiationException {
+      if(keyTypeClass == null || attributes == null) {
+        return null;
+      }
+      Object tag = keyTypeClass.newInstance();
+      if(Map.class.isAssignableFrom(keyTypeClass)) {
+        for (int i=0; i<attributes.getLength(); ++i) {
+          ((Map)tag).put(attributes.getQName(i), attributes.getValue(i));
+        }
+      }
+      Field[] fields = tag.getClass().getDeclaredFields();
+      for (Field f : fields) {
+        for (int i=0; i<attributes.getLength(); ++i) {
+          if(f.getName().equals(attributes.getQName(i))) {
+            try {
+              setObjectFieldValue(tag, f, parserBaseTypeValueByClass(attributes.getValue(i), f.getType()));
+            } catch (Exception e) {
+              log.severe(e.getLocalizedMessage());
+            }
+            break;
+          }
+        }
+      }
+      return tag;
+    }
+
+    /**
+     * put a key-value to the map
+     * @param map
+     * @param key
+     * @param value
+     */
+    private void putMapKeyValue(Object map, Object key, Object value) {
+      if(map == null || !Map.class.isAssignableFrom(map.getClass())) {
+        throw new IllegalArgumentException();
+      }
+      ((Map)map).put(key, value);
+    }
+
+    /**
+     * get field by name
+     * @param currentClass
+     * @param fieldName
+     * @return
+     */
     private Field checkCurrentField(Class<?> currentClass, String fieldName) {
       Field[] fields = classFieldsMap.get(currentClass);
       if(fields != null) {
@@ -623,6 +703,9 @@ public class SaxUtil {
 
   }
 
+  /**
+   * exception type of translateXml
+   */
   static class TranslateXmlException extends Exception {
     public TranslateXmlException(Exception e) {
       super(e);
