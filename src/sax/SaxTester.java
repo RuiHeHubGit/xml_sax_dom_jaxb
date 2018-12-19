@@ -20,8 +20,8 @@ public class SaxTester {
       System.out.println(testBean1);
       String xml = SaxUtil.objectToXml(testBean1);
       System.out.println(xml);
- //     TestBean parseTestBean = SaxUtil.parse(xml, TestBean.class);
-  //    System.out.println(parseTestBean);
+      TestBean parseTestBean = SaxUtil.parse(xml, TestBean.class);
+      System.out.println(parseTestBean);
 
       Order order = new Order();
       order.setId(1);
